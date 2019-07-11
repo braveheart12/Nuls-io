@@ -134,7 +134,15 @@ public class TransactionUtil {
             if (response.isSuccess()) {
                 Map responseData = (Map) response.getResponseData();
                 Map data = (Map) responseData.get("tx_save");
-                return (Boolean) data.get("value");
+                boolean value = (Boolean) data.get("value");
+                if (!value) {
+                    commonLog.error("response.getResponseErrorCode-" + response.getResponseErrorCode());
+                    commonLog.error("response.getResponseData-" + response.getResponseData());
+                }
+                return value;
+            } else {
+                commonLog.error("response.getResponseErrorCode-" + response.getResponseErrorCode());
+                commonLog.error("response.getResponseData-" + response.getResponseData());
             }
             return false;
         } catch (Exception e) {
