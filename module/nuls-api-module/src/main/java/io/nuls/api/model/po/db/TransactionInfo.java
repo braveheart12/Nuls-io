@@ -103,7 +103,7 @@ public class TransactionInfo {
         } else if (type == TxType.CROSS_CHAIN) {
             //取出转出链和接收链的id
             int fromChainId = AddressTool.getChainIdByAddress(coinFroms.get(0).getAddress());
-            int toChainId = AddressTool.getChainIdByAddress(coinTos.get(0).getAddress());
+            int toChainId  = AddressTool.getChainIdByAddress(coinTos.get(0).getAddress());
 
             //如果当前链是NULS主链，手续费是收取主网主资产NULS
             if (chainId == ApiContext.mainChainId) {
@@ -135,7 +135,7 @@ public class TransactionInfo {
             //如果是共识相关的交易，收取共识配置的手续费
             assetInfo = CacheManager.getRegisteredAsset(DBUtil.getAssetKey(configInfo.getChainId(), configInfo.getAwardAssetId()));
             feeInfo = new FeeInfo(assetInfo.getChainId(), assetInfo.getAssetId(), assetInfo.getSymbol());
-            BigInteger feeValue = calcFeeValue(assetInfo.getChainId(),assetInfo.getAssetId());
+            BigInteger feeValue = calcFeeValue(assetInfo.getChainId(), assetInfo.getAssetId());
             feeInfo.setValue(feeValue);
         } else {
             //其他类型的交易,去本链默认资产手续费
