@@ -33,6 +33,15 @@ import java.util.concurrent.TimeUnit;
  */
 @Order(Integer.MIN_VALUE)
 public abstract class RpcModule implements InitializingBean {
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", RpcModule.class.getSimpleName() + "[", "]")
+                .add("dependencies=" + dependencies)
+                .add("state=" + state)
+                .add("followerList=" + followerList)
+                .add("dependentReadyState=" + dependentReadyState)
+                .toString();
+    }
 
     private static final String LANGUAGE = "en";
     private static final String LANGUAGE_PATH =  "languages";
@@ -139,6 +148,7 @@ public abstract class RpcModule implements InitializingBean {
                 try {
                     //监听与follower的连接，如果断开后需要修改通知状态
                     ConnectData connectData = ConnectManager.getConnectDataByRole(module.getName());
+
                     connectData.addCloseEvent(() -> {
                         if (!ConnectManager.ROLE_CHANNEL_MAP.containsKey(module.getName())) {
                             Log.warn("RMB:follower:{}模块触发连接断开事件", module);
@@ -146,6 +156,7 @@ public abstract class RpcModule implements InitializingBean {
                             followerList.remove(module);
                         }
                     });
+                    Log.debug("绑定连接断开事件:{}",module.name);
                 } catch (Exception e) {
                     Log.error("RMB:获取follower:{}模块连接发生异常.", module, e);
                 }

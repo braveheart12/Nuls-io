@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
 import static io.nuls.block.BlockBootstrap.blockConfig;
-import static io.nuls.block.constant.Constant.CONSENSUS_WORKING;
+import static io.nuls.block.constant.Constant.MODULE_WORKING;
 import static io.nuls.block.constant.Constant.NODE_COMPARATOR;
 import static io.nuls.block.constant.LocalBlockStateEnum.*;
 
@@ -168,6 +168,7 @@ public class BlockSynchronizer implements Runnable {
             }
             waitUntilNetworkStable();
             while (!synchronize()) {
+                cachedBlockSize = new AtomicInteger(0);
                 Thread.sleep(synSleepInterval);
             }
         } catch (Exception e) {
@@ -219,7 +220,8 @@ public class BlockSynchronizer implements Runnable {
         if (minNodeAmount == 0 && availableNodes.isEmpty()) {
             commonLog.info("skip block syn, because minNodeAmount is set to 0, minNodeAmount should't set to 0 otherwise you want run local node without connect with network");
             context.setStatus(StatusEnum.RUNNING);
-            ConsensusUtil.notice(chainId, CONSENSUS_WORKING);
+            ConsensusUtil.notice(chainId, MODULE_WORKING);
+            TransactionUtil.notice(chainId, MODULE_WORKING);
             return true;
         }
         //3.统计网络中可用节点的一致区块高度、区块hash
@@ -234,7 +236,8 @@ public class BlockSynchronizer implements Runnable {
         if (params.getNetLatestHeight() == 0 && size == availableNodes.size()) {
             commonLog.info("chain-" + chainId + ", first start");
             context.setStatus(StatusEnum.RUNNING);
-            ConsensusUtil.notice(chainId, CONSENSUS_WORKING);
+            ConsensusUtil.notice(chainId, MODULE_WORKING);
+            TransactionUtil.notice(chainId, MODULE_WORKING);
             return true;
         }
         //检查本地区块状态
@@ -242,7 +245,8 @@ public class BlockSynchronizer implements Runnable {
         if (stateEnum.equals(CONSISTENT)) {
             commonLog.info("chain-" + chainId + ", local blocks is newest");
             context.setStatus(StatusEnum.RUNNING);
-            ConsensusUtil.notice(chainId, CONSENSUS_WORKING);
+            ConsensusUtil.notice(chainId, MODULE_WORKING);
+            TransactionUtil.notice(chainId, MODULE_WORKING);
             return true;
         }
         if (stateEnum.equals(UNCERTAINTY)) {
@@ -285,9 +289,9 @@ public class BlockSynchronizer implements Runnable {
                 //要测试分叉链切换或者孤儿链,放开下面语句,概率会加大
 //                if (true) {
                 commonLog.info("block syn complete successfully, current height-" + params.getNetLatestHeight());
-                System.gc();
                 context.setStatus(StatusEnum.RUNNING);
-                ConsensusUtil.notice(chainId, CONSENSUS_WORKING);
+                ConsensusUtil.notice(chainId, MODULE_WORKING);
+                TransactionUtil.notice(chainId, MODULE_WORKING);
                 return true;
             } else {
                 commonLog.warn("block syn complete but is not newest");
@@ -461,7 +465,7 @@ public class BlockSynchronizer implements Runnable {
         //如果双方共同高度<网络高度,要进行hash判断,需要从网络上下载区块,因为params里只有最新的区块hash,没有旧的hash
         if (commonHeight < netHeight) {
             for (Node node : params.getNodes()) {
-                Block remoteBlock = BlockUtil.downloadBlockByHash(chainId, localHash, node.getId());
+                Block remoteBlock = BlockUtil.downloadBlockByHash(chainId, localHash, node.getId(), commonHeight);
                 if (remoteBlock != null) {
                     netHash = remoteBlock.getHeader().getHash();
                     return localHash.equals(netHash);

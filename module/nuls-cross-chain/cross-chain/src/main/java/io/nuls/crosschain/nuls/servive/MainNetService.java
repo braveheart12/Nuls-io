@@ -19,7 +19,7 @@ public interface MainNetService {
      * @param params
      * @return        Processing result
      * */
-    Result registerCrossChain(Map<String,Object> params);
+    Result registerCrossChain(Map<String, Object> params);
 
     /**
      * 注销跨链交易
@@ -28,7 +28,7 @@ public interface MainNetService {
      * @param params
      * @return        Processing result
      */
-    Result cancelCrossChain(Map<String,Object> params);
+    Result cancelCrossChain(Map<String, Object> params);
 
     /**
      * 跨链注册消息变更
@@ -66,7 +66,7 @@ public interface MainNetService {
      * @param params
      * @return        Processing result
      * */
-    Result getFriendChainCirculation(Map<String,Object> params);
+    Result getFriendChainCirculation(Map<String, Object> params);
 
 
 }

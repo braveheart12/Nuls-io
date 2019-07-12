@@ -35,7 +35,7 @@ public interface SendedHeightService {
      * @param chainID   链ID
      * @return          删除成功与否
      * */
-    boolean delete(long height,int chainID);
+    boolean delete(long height, int chainID);
 
     /**
      * 查询所有

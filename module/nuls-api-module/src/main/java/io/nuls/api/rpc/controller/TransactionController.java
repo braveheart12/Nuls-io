@@ -1,10 +1,14 @@
 package io.nuls.api.rpc.controller;
 
+import io.nuls.api.ApiContext;
 import io.nuls.api.analysis.AnalysisHandler;
 import io.nuls.api.analysis.WalletRpcHandler;
 import io.nuls.api.db.*;
 import io.nuls.api.exception.JsonRpcException;
 import io.nuls.api.manager.CacheManager;
+import io.nuls.api.model.entity.CallContractData;
+import io.nuls.api.model.entity.CreateContractData;
+import io.nuls.api.model.entity.DeleteContractData;
 import io.nuls.api.model.po.db.*;
 import io.nuls.api.model.po.db.mini.MiniCoinBaseInfo;
 import io.nuls.api.model.po.db.mini.MiniTransactionInfo;
@@ -13,19 +17,25 @@ import io.nuls.api.model.rpc.RpcResult;
 import io.nuls.api.utils.LoggerUtil;
 import io.nuls.api.utils.VerifyUtils;
 import io.nuls.base.RPCUtil;
+import io.nuls.base.basic.AddressTool;
 import io.nuls.base.basic.NulsByteBuffer;
 import io.nuls.base.data.Transaction;
 import io.nuls.core.basic.Result;
+import io.nuls.core.constant.CommonCodeConstanst;
+import io.nuls.core.constant.ErrorCode;
 import io.nuls.core.constant.TxType;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Controller;
 import io.nuls.core.core.annotation.RpcMethod;
+import io.nuls.core.exception.NulsException;
 import io.nuls.core.model.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static io.nuls.api.constant.DBTableConstant.TX_COUNT;
+import static io.nuls.core.constant.TxType.*;
 
 @Controller
 public class TransactionController {
@@ -100,7 +110,7 @@ public class TransactionController {
             } else if (tx.getType() == TxType.RED_PUNISH) {
                 PunishLogInfo punishLog = punishService.getRedPunishLog(chainId, tx.getHash());
                 tx.setTxData(punishLog);
-            } else if (tx.getType() == TxType.CREATE_CONTRACT) {
+            } else if (tx.getType() == CREATE_CONTRACT) {
 //                try {
 //                    ContractResultInfo resultInfo = contractService.getContractResultInfo(tx.getHash());
 //                    ContractInfo contractInfo = (ContractInfo) tx.getTxData();
@@ -108,7 +118,7 @@ public class TransactionController {
 //                } catch (Exception e) {
 //                    Log.error(e);
 //                }
-            } else if (tx.getType() == TxType.CALL_CONTRACT) {
+            } else if (tx.getType() == CALL_CONTRACT) {
 //                try {
 //                    ContractResultInfo resultInfo = contractService.getContractResultInfo(tx.getHash());
 //                    ContractCallInfo contractCallInfo = (ContractCallInfo) tx.getTxData();
@@ -209,7 +219,7 @@ public class TransactionController {
             pageSize = 10;
         }
 
-        PageInfo<TransactionInfo> pageInfo;
+        PageInfo<MiniTransactionInfo> pageInfo;
         if (!CacheManager.isChainExist(chainId)) {
             pageInfo = new PageInfo<>(pageNumber, pageSize);
         } else {
@@ -244,6 +254,9 @@ public class TransactionController {
 
     @RpcMethod("validateTx")
     public RpcResult validateTx(List<Object> params) {
+        if(!ApiContext.isReady) {
+            return RpcResult.chainNotReady();
+        }
         VerifyUtils.verifyParams(params, 2);
         int chainId;
         String txHex;
@@ -260,6 +273,9 @@ public class TransactionController {
         if (!CacheManager.isChainExist(chainId)) {
             return RpcResult.dataNotFound();
         }
+        if (StringUtils.isBlank(txHex)) {
+            return RpcResult.paramError("[txHex] is inValid");
+        }
         Result result = WalletRpcHandler.validateTx(chainId, txHex);
         if (result.isSuccess()) {
             return RpcResult.success(result.getData());
@@ -270,6 +286,9 @@ public class TransactionController {
 
     @RpcMethod("broadcastTx")
     public RpcResult broadcastTx(List<Object> params) {
+        if(!ApiContext.isReady) {
+            return RpcResult.chainNotReady();
+        }
         VerifyUtils.verifyParams(params, 2);
         int chainId;
         String txHex;
@@ -288,7 +307,56 @@ public class TransactionController {
             if (!CacheManager.isChainExist(chainId)) {
                 return RpcResult.dataNotFound();
             }
-            Result result = WalletRpcHandler.broadcastTx(chainId, txHex);
+            int type = this.extractTxTypeFromTx(txHex);
+            Result result = Result.getSuccess(null);
+            switch (type) {
+                case CREATE_CONTRACT:
+                    Transaction tx = new Transaction();
+                    tx.parse(new NulsByteBuffer(RPCUtil.decode(txHex)));
+                    CreateContractData create = new CreateContractData();
+                    create.parse(new NulsByteBuffer(tx.getTxData()));
+                    result = WalletRpcHandler.validateContractCreate(chainId,
+                            AddressTool.getStringAddressByBytes(create.getSender()),
+                            create.getGasLimit(),
+                            create.getPrice(),
+                            RPCUtil.encode(create.getCode()),
+                            create.getArgs());
+                    break;
+                case CALL_CONTRACT:
+                    Transaction callTx = new Transaction();
+                    callTx.parse(new NulsByteBuffer(RPCUtil.decode(txHex)));
+                    CallContractData call = new CallContractData();
+                    call.parse(new NulsByteBuffer(callTx.getTxData()));
+                    result = WalletRpcHandler.validateContractCall(chainId,
+                            AddressTool.getStringAddressByBytes(call.getSender()),
+                            call.getValue(),
+                            call.getGasLimit(),
+                            call.getPrice(),
+                            AddressTool.getStringAddressByBytes(call.getContractAddress()),
+                            call.getMethodName(),
+                            call.getMethodDesc(),
+                            call.getArgs());
+                    break;
+                case DELETE_CONTRACT:
+                    Transaction deleteTx = new Transaction();
+                    deleteTx.parse(new NulsByteBuffer(RPCUtil.decode(txHex)));
+                    DeleteContractData delete = new DeleteContractData();
+                    delete.parse(new NulsByteBuffer(deleteTx.getTxData()));
+                    result = WalletRpcHandler.validateContractDelete(chainId,
+                            AddressTool.getStringAddressByBytes(delete.getSender()),
+                            AddressTool.getStringAddressByBytes(delete.getContractAddress()));
+                    break;
+                default:
+                    break;
+            }
+            Map contractMap = (Map) result.getData();
+            if (contractMap != null && Boolean.FALSE.equals(contractMap.get("success"))) {
+                result.setErrorCode(CommonCodeConstanst.DATA_ERROR);
+                result.setMsg((String) contractMap.get("msg"));
+                return RpcResult.failed(result);
+            }
+
+            result = WalletRpcHandler.broadcastTx(chainId, txHex);
 
             if (result.isSuccess()) {
                 Transaction tx = new Transaction();
@@ -303,5 +371,11 @@ public class TransactionController {
             LoggerUtil.commonLog.error(e);
             return RpcResult.failed(RpcErrorCode.TX_PARSE_ERROR);
         }
+    }
+
+    private int extractTxTypeFromTx(String txString) throws NulsException {
+        String txTypeHexString = txString.substring(0, 4);
+        NulsByteBuffer byteBuffer = new NulsByteBuffer(RPCUtil.decode(txTypeHexString));
+        return byteBuffer.readUint16();
     }
 }
