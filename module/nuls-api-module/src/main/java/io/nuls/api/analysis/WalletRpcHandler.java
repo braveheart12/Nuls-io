@@ -41,10 +41,8 @@ public class WalletRpcHandler {
             if (null == blockHex) {
                 return Result.getSuccess(null);
             }
-            byte[] bytes = RPCUtil.decode(blockHex);
-            Block block = new Block();
-            block.parse(new NulsByteBuffer(bytes));
-            BlockInfo blockInfo = AnalysisHandler.toBlockInfo(block, chainID);
+
+            BlockInfo blockInfo = AnalysisHandler.toBlockInfo(blockHex, chainID);
 
             return Result.getSuccess(null).setData(blockInfo);
         } catch (Exception e) {
@@ -63,11 +61,7 @@ public class WalletRpcHandler {
             if (null == blockHex) {
                 return Result.getSuccess(null);
             }
-            byte[] bytes = RPCUtil.decode(blockHex);
-            Block block = new Block();
-            block.parse(new NulsByteBuffer(bytes));
-            //block.getHeader().setSize(bytes.length);
-            BlockInfo blockInfo = AnalysisHandler.toBlockInfo(block, chainID);
+            BlockInfo blockInfo = AnalysisHandler.toBlockInfo(blockHex, chainID);
             return Result.getSuccess(null).setData(blockInfo);
         } catch (Exception e) {
             Log.error(e);
@@ -134,13 +128,14 @@ public class WalletRpcHandler {
 //        return null;
 //    }
 
-    public static Result<PageInfo<FreezeInfo>> getFreezeList(int chainId, int pageIndex, int pageSize, String address, int assetId) {
+    public static Result<PageInfo<FreezeInfo>> getFreezeList(int chainId, int assetChainId, int assetId, String address, int pageIndex, int pageSize) {
         Map<String, Object> params = new HashMap<>();
         params.put(Constants.VERSION_KEY_STR, ApiContext.VERSION);
         params.put(Constants.CHAIN_ID, chainId);
         params.put("pageNumber", pageIndex);
         params.put("pageSize", pageSize);
         params.put("address", address);
+        params.put("assetChainId", assetChainId);
         params.put("assetId", assetId);
         try {
             Map map = (Map) RpcCall.request(ModuleE.LG.abbr, CommandConstant.GET_FREEZE, params);
@@ -154,12 +149,10 @@ public class WalletRpcHandler {
                 freezeInfo.setLockedValue(Long.parseLong(map1.get("lockedValue").toString()));
                 freezeInfo.setTime(Long.parseLong(map1.get("time").toString()));
                 freezeInfo.setTxHash((String) map1.get("txHash"));
-                if (freezeInfo.getLockedValue() == -1) {
-                    freezeInfo.setType(FREEZE_CONSENSUS_LOCK_TYPE);
-                } else if (freezeInfo.getLockedValue() < ApiConstant.BlOCK_HEIGHT_TIME_DIVIDE) {
-                    freezeInfo.setType(FREEZE_HEIGHT_LOCK_TYPE);
-                } else {
-                    freezeInfo.setType(FREEZE_TIME_LOCK_TYPE);
+                Result<TransactionInfo> result = getTx(chainId, freezeInfo.getTxHash());
+                if (result.isSuccess()) {
+                    TransactionInfo txInfo = result.getData();
+                    freezeInfo.setType(txInfo.getType());
                 }
                 freezeInfos.add(freezeInfo);
             }
@@ -169,7 +162,6 @@ public class WalletRpcHandler {
             e.printStackTrace();
             return Result.getFailed(ApiErrorCode.DATA_PARSE_ERROR);
         }
-
     }
 
     public static Result<TransactionInfo> getTx(int chainId, String hash) {
@@ -250,7 +242,8 @@ public class WalletRpcHandler {
         Map map = (Map) RpcCall.request(ModuleE.SC.abbr, CommandConstant.CONTRACT_INFO, params);
 
         contractInfo.setCreater(map.get("creater").toString());
-        contractInfo.setNrc20((Boolean) map.get("isNrc20"));
+        contractInfo.setNrc20((Boolean) map.get("nrc20"));
+        contractInfo.setDirectPayable((Boolean) map.get("directPayable"));
         if (contractInfo.isNrc20()) {
             contractInfo.setTokenName(map.get("nrc20TokenName").toString());
             contractInfo.setSymbol(map.get("nrc20TokenSymbol").toString());
@@ -305,11 +298,14 @@ public class WalletRpcHandler {
         Response response = RpcCall.requestAndResponse(ModuleE.SC.abbr, CommandConstant.VALIDATE_CREATE, params);
         boolean bool = response.isSuccess();
         String msg = "";
+        String code = "";
         if (!bool) {
             msg = response.getResponseComment();
+            code = response.getResponseErrorCode();
         }
-        Map map = new HashMap(4);
+        Map map = new HashMap(8);
         map.put("success", bool);
+        map.put("code", code);
         map.put("msg", msg);
         return Result.getSuccess(null).setData(map);
     }
@@ -329,11 +325,14 @@ public class WalletRpcHandler {
         Response response = RpcCall.requestAndResponse(ModuleE.SC.abbr, CommandConstant.VALIDATE_CALL, params);
         boolean bool = response.isSuccess();
         String msg = "";
+        String code = "";
         if (!bool) {
             msg = response.getResponseComment();
+            code = response.getResponseErrorCode();
         }
-        Map map = new HashMap(4);
+        Map map = new HashMap(8);
         map.put("success", bool);
+        map.put("code", code);
         map.put("msg", msg);
         return Result.getSuccess(null).setData(map);
     }
@@ -346,11 +345,14 @@ public class WalletRpcHandler {
         Response response = RpcCall.requestAndResponse(ModuleE.SC.abbr, CommandConstant.VALIDATE_DELETE, params);
         boolean bool = response.isSuccess();
         String msg = "";
+        String code = "";
         if (!bool) {
             msg = response.getResponseComment();
+            code = response.getResponseErrorCode();
         }
-        Map map = new HashMap(4);
+        Map map = new HashMap(8);
         map.put("success", bool);
+        map.put("code", code);
         map.put("msg", msg);
         return Result.getSuccess(null).setData(map);
     }

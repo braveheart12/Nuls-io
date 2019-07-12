@@ -21,6 +21,7 @@
 package io.nuls.block.rpc.call;
 
 import io.nuls.base.RPCUtil;
+import io.nuls.base.basic.AddressTool;
 import io.nuls.base.data.Block;
 import io.nuls.base.data.BlockHeader;
 import io.nuls.block.constant.BlockErrorCode;
@@ -28,6 +29,7 @@ import io.nuls.block.manager.ContextManager;
 import io.nuls.block.model.ChainContext;
 import io.nuls.block.service.BlockService;
 import io.nuls.core.basic.Result;
+import io.nuls.core.constant.ErrorCode;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
 import io.nuls.core.log.logback.NulsLogger;
@@ -36,7 +38,6 @@ import io.nuls.core.rpc.model.ModuleE;
 import io.nuls.core.rpc.model.message.Response;
 import io.nuls.core.rpc.netty.processor.ResponseMessageProcessor;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,7 +79,7 @@ public class ConsensusUtil {
                     return Result.getSuccess(BlockErrorCode.SUCCESS).setData(contractList);
                 }
             }
-            return Result.getFailed(BlockErrorCode.BLOCK_VERIFY_ERROR);
+            return Result.getFailed(ErrorCode.init(response.getResponseErrorCode()));
         } catch (Exception e) {
             commonLog.error("", e);
             return Result.getFailed(BlockErrorCode.BLOCK_VERIFY_ERROR);
@@ -95,7 +96,7 @@ public class ConsensusUtil {
     public static boolean notice(int chainId, int status) {
         NulsLogger commonLog = ContextManager.getContext(chainId).getLogger();
         try {
-            Map<String, Object> params = new HashMap<>(3);
+            Map<String, Object> params = new HashMap<>(2);
 //            params.put(Constants.VERSION_KEY_STR, "1.0");
             params.put(Constants.CHAIN_ID, chainId);
             params.put("status", status);
@@ -123,18 +124,19 @@ public class ConsensusUtil {
         if (masterHeader.getHash().equals(forkHeader.getHash())) {
             return true;
         }
-        byte[] masterHeaderPackingAddress = masterHeader.getPackingAddress(chainId);
-        byte[] forkHeaderPackingAddress = forkHeader.getPackingAddress(chainId);
-        if (!Arrays.equals(masterHeaderPackingAddress, forkHeaderPackingAddress)) {
+        String masterHeaderPackingAddress = AddressTool.getStringAddressByBytes(masterHeader.getPackingAddress(chainId)) + masterHeader.getHeight();
+        String forkHeaderPackingAddress = AddressTool.getStringAddressByBytes(forkHeader.getPackingAddress(chainId)) + forkHeader.getHeight();
+
+        if (!masterHeaderPackingAddress.equals(forkHeaderPackingAddress)) {
             return true;
         }
-        List<byte[]> packingAddressList = context.getPackingAddressList();
+        List<String> packingAddressList = context.getPackingAddressList();
         //May 19th 2019 EdwardChan 对于List中的字节数组不能使用contains来进行判断,因为equals方法不能用来判断字节数组中的内容是否相等
         //if (packingAddressList.contains(masterHeaderPackingAddress)) {
         //    return true;
         //}
-        for (byte[] tmp : packingAddressList) {
-            if (Arrays.equals(tmp,masterHeaderPackingAddress)) {
+        for (String tmp : packingAddressList) {
+            if (masterHeaderPackingAddress.equals(tmp)) {
                 return true;
             }
         }

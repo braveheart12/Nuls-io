@@ -15,5 +15,5 @@ public interface BlockService {
      * @param params  参数
      * @return        消息处理结果
      * */
-    Result newBlockHeight(Map<String,Object> params);
+    Result newBlockHeight(Map<String, Object> params);
 }

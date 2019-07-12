@@ -13,6 +13,7 @@ import io.nuls.core.exception.NulsException;
 import io.nuls.core.log.logback.NulsLogger;
 import io.nuls.core.model.StringUtils;
 import io.nuls.core.rpc.util.NulsDateUtils;
+import io.nuls.poc.constant.ConsensusConstant;
 import io.nuls.poc.constant.ConsensusErrorCode;
 import io.nuls.poc.model.bo.BlockData;
 import io.nuls.poc.model.bo.Chain;
@@ -166,7 +167,8 @@ public class ConsensusProcess {
      * Otherwise, if the block from the previous node has not been received after waiting for a certain time, it will be packed directly.
      */
     private void waitReceiveNewestBlock(Chain chain, MeetingMember self, MeetingRound round) {
-        long timeout = chain.getConfig().getPackingInterval() / 2;
+        int waitRatio = 60;
+        long timeout = chain.getConfig().getPackingInterval() * waitRatio / ConsensusConstant.VALUE_OF_ONE_HUNDRED;
         long endTime = self.getPackStartTime() + timeout;
         boolean hasReceiveNewestBlock;
         if (NulsDateUtils.getCurrentTimeSeconds() >= endTime) {
@@ -277,12 +279,7 @@ public class ConsensusProcess {
          * 检查组装交易过程中是否收到新区块
          * Verify that new blocks are received halfway through packaging
          * */
-        bestBlock = chain.getNewestHeader();
         long realPackageHeight = bestBlock.getHeight() + 1;
-        if (!(bd.getPreHash().equals(bestBlock.getHash()) && realPackageHeight > packageHeight)) {
-            bd.setHeight(realPackageHeight);
-            bd.setPreHash(bestBlock.getHash());
-        }
 
         BlockExtendsData bestExtendsData = new BlockExtendsData(bestBlock.getExtend());
         boolean stateRootIsNull = false;
@@ -323,7 +320,7 @@ public class ConsensusProcess {
         bestBlock = chain.getNewestHeader();
         if (!newBlock.getHeader().getPreHash().equals(bestBlock.getHash())) {
             newBlock.getHeader().setPreHash(bestBlock.getHash());
-            newBlock.getHeader().setHeight(bestBlock.getHeight());
+            newBlock.getHeader().setHeight(bestBlock.getHeight()+1);
             if (stateRootIsNull) {
                 bestExtendsData = new BlockExtendsData(bestBlock.getExtend());
                 extendsData.setStateRoot(bestExtendsData.getStateRoot());

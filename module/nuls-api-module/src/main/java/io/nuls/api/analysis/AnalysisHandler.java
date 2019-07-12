@@ -7,6 +7,7 @@ import io.nuls.api.manager.CacheManager;
 import io.nuls.api.model.entity.*;
 import io.nuls.api.model.po.db.*;
 import io.nuls.api.rpc.RpcCall;
+import io.nuls.api.utils.DBUtil;
 import io.nuls.base.RPCUtil;
 import io.nuls.base.basic.AddressTool;
 import io.nuls.base.basic.NulsByteBuffer;
@@ -33,14 +34,20 @@ public class AnalysisHandler {
      * Convert block information to blockInfo information
      * 将block信息转换为blockInfo信息
      *
-     * @param block
+     * @param blockHex
      * @param chainId
      * @return
      * @throws Exception
      */
-    public static BlockInfo toBlockInfo(Block block, int chainId) throws Exception {
+    public static BlockInfo toBlockInfo(String blockHex, int chainId) throws Exception {
+        byte[] bytes = RPCUtil.decode(blockHex);
+        Block block = new Block();
+        block.parse(new NulsByteBuffer(bytes));
+
         BlockInfo blockInfo = new BlockInfo();
+        blockInfo.setBlockHex(blockHex);
         BlockHeaderInfo blockHeader = toBlockHeaderInfo(block.getHeader(), chainId);
+        blockHeader.setSize(bytes.length);
         blockHeader.setTxHashList(new ArrayList<>());
         //提取智能合约相关交易的hash，查询合约执行结果
         //Extract the hash of smart contract related transactions and query the contract execution results
@@ -79,9 +86,9 @@ public class AnalysisHandler {
         }
         blockInfo.setTxList(toTxs(chainId, block.getTxs(), blockHeader, resultInfoMap));
         //计算coinBase奖励
-        blockHeader.setReward(calcCoinBaseReward(blockInfo.getTxList().get(0)));
+        blockHeader.setReward(calcCoinBaseReward(chainId, blockInfo.getTxList().get(0)));
         //计算总手续费
-        blockHeader.setTotalFee(calcFee(blockInfo.getTxList()));
+        blockHeader.setTotalFee(calcFee(blockInfo.getTxList(), chainId));
         //重新计算区块打包的交易个数
         blockHeader.setTxCount(blockInfo.getTxList().size());
         blockInfo.setHeader(blockHeader);
@@ -100,7 +107,6 @@ public class AnalysisHandler {
         info.setPackingAddress(AddressTool.getStringAddressByBytes(blockHeader.getPackingAddress(chainId)));
         info.setTxCount(blockHeader.getTxCount());
         info.setRoundIndex(extendsData.getRoundIndex());
-        info.setSize(blockHeader.size());
         info.setPackingIndexOfRound(extendsData.getPackingIndexOfRound());
         info.setScriptSign(HexUtil.encode(blockHeader.getBlockSignature().serialize()));
         info.setAgentVersion(extendsData.getBlockVersion());
@@ -141,7 +147,6 @@ public class AnalysisHandler {
         TransactionInfo info = new TransactionInfo();
         info.setHash(tx.getHash().toHex());
         info.setHeight(tx.getBlockHeight());
-        info.setFee(tx.getFee());
         info.setType(tx.getType());
         info.setSize(tx.getSize());
         info.setCreateTime(tx.getTime());
@@ -169,6 +174,7 @@ public class AnalysisHandler {
             info.setTxData(toTxData(chainId, tx));
         }
         info.calcValue();
+        info.calcFee(chainId);
         return info;
     }
 
@@ -176,7 +182,6 @@ public class AnalysisHandler {
         TransactionInfo info = new TransactionInfo();
         info.setHash(tx.getHash().toHex());
         info.setHeight(tx.getBlockHeight());
-        info.setFee(tx.getFee());
         info.setType(tx.getType());
         info.setSize(tx.getSize());
         info.setCreateTime(tx.getTime());
@@ -207,6 +212,7 @@ public class AnalysisHandler {
             info.setTxData(toTxData(chainId, tx, resultInfo));
         }
         info.calcValue();
+        info.calcFee(chainId);
         return info;
     }
 
@@ -328,7 +334,7 @@ public class AnalysisHandler {
         info.setCreateTime(tx.getTime());
         info.setBlockHeight(tx.getBlockHeight());
         info.setFee(tx.getFee());
-        info.setKey(info.getTxHash() + info.getAddress());
+        info.setKey(DBUtil.getDepositKey(info.getTxHash(), info.getAddress()));
         return info;
     }
 
@@ -395,6 +401,7 @@ public class AnalysisHandler {
         ContractInfo contractInfo = new ContractInfo();
         contractInfo.setCreateTxHash(tx.getHash().toHex());
         contractInfo.setContractAddress(AddressTool.getStringAddressByBytes(data.getContractAddress()));
+        contractInfo.setAlias(data.getAlias());
         contractInfo.setBlockHeight(tx.getBlockHeight());
         contractInfo.setCreateTime(tx.getTime());
         if (tx.getStatus() == TxStatusEnum.CONFIRMED) {
@@ -409,6 +416,7 @@ public class AnalysisHandler {
         data.parse(new NulsByteBuffer(tx.getTxData()));
         ContractInfo contractInfo = new ContractInfo();
         contractInfo.setCreateTxHash(tx.getHash().toHex());
+        contractInfo.setAlias(data.getAlias());
         contractInfo.setContractAddress(AddressTool.getStringAddressByBytes(data.getContractAddress()));
         contractInfo.setBlockHeight(tx.getBlockHeight());
         contractInfo.setCreateTime(tx.getTime());
@@ -429,7 +437,8 @@ public class AnalysisHandler {
         Map map = (Map) RpcCall.request(ModuleE.SC.abbr, CommandConstant.CONTRACT_INFO, params);
 
         contractInfo.setCreater(map.get("creater").toString());
-        contractInfo.setNrc20((Boolean) map.get("isNrc20"));
+        contractInfo.setNrc20((Boolean) map.get("nrc20"));
+        contractInfo.setDirectPayable((Boolean) map.get("directPayable"));
         if (contractInfo.isNrc20()) {
             contractInfo.setTokenName(map.get("nrc20TokenName").toString());
             contractInfo.setSymbol(map.get("nrc20TokenSymbol").toString());
@@ -571,6 +580,7 @@ public class AnalysisHandler {
         resultInfo.setRefundFee((String) resultMap.get("refundFee"));
         resultInfo.setValue((String) resultMap.get("value"));
         //resultInfo.setBalance((String) map.get("balance"));
+        resultInfo.setEvents((List<String>) resultMap.get("events"));
         resultInfo.setRemark((String) resultMap.get("remark"));
         resultInfo.setContractTxList((List<String>) resultMap.get("contractTxList"));
 
@@ -646,22 +656,30 @@ public class AnalysisHandler {
         return assetInfo;
     }
 
-    public static BigInteger calcCoinBaseReward(TransactionInfo coinBaseTx) {
+    public static BigInteger calcCoinBaseReward(int chainId, TransactionInfo coinBaseTx) {
         BigInteger reward = BigInteger.ZERO;
         if (coinBaseTx.getCoinTos() == null) {
             return reward;
         }
-
+        //奖励只计算本链的共识资产
+        AssetInfo assetInfo = CacheManager.getCacheChain(chainId).getDefaultAsset();
         for (CoinToInfo coinTo : coinBaseTx.getCoinTos()) {
-            reward = reward.add(coinTo.getAmount());
+            if (coinTo.getChainId() == assetInfo.getChainId() || coinTo.getAssetsId() == assetInfo.getAssetId()) {
+                reward = reward.add(coinTo.getAmount());
+            }
         }
         return reward;
     }
 
-    public static BigInteger calcFee(List<TransactionInfo> txs) {
+    public static BigInteger calcFee(List<TransactionInfo> txs, int chainId) {
         BigInteger fee = BigInteger.ZERO;
+        //手续费只计算本链的共识资产
+        AssetInfo assetInfo = CacheManager.getCacheChain(chainId).getDefaultAsset();
         for (int i = 1; i < txs.size(); i++) {
-            fee = fee.add(txs.get(i).getFee());
+            FeeInfo feeInfo = txs.get(i).getFee();
+            if (feeInfo.getChainId() == assetInfo.getChainId() && feeInfo.getAssetId() == assetInfo.getAssetId()) {
+                fee = fee.add(feeInfo.getValue());
+            }
         }
         return fee;
     }

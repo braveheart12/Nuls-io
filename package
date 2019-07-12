@@ -32,12 +32,13 @@ log(){ #print date prefix and green
     echoGreen "$now $@"
 }
 
+BUILD_NULSTAR="1"
 NULSTAR_FILE_NAME="nulstar-20190529.tar.gz"
 #NULSTAR download url
 NULSTAR_URL="http://pub-readingpal.oss-cn-hangzhou.aliyuncs.com/${NULSTAR_FILE_NAME}"
 #获取参数
 #输出目录
-NULS_WALLET_TAR_NAME="./NULS-Wallet-linux64-alpha2"
+NULS_WALLET_TAR_NAME="./NULS-Wallet-linux64-beta1"
 MODULES_PATH="${NULS_WALLET_TAR_NAME}"
 #RELEASE_OUT_PATH="./NULS-Walltet-linux64-alpha1"
 #是否马上更新代码
@@ -225,19 +226,19 @@ fi
 #0.download Nulstar
 if [ -n  "${BUILD_NULSTAR}" ]; then
     log "download Nulstar"
-    wget $NULSTAR_URL
-    if [ -f "./${NULSTAR_FILE_NAME}" ]; then
-        tar -xvf "./${NULSTAR_FILE_NAME}" -C "${BUILD_PATH}/tmp"
+    if [ ! -f "${BUILD_PATH}/tmp/${NULSTAR_FILE_NAME}" ]; then
+        wget $NULSTAR_URL
+        mv "./${NULSTAR_FILE_NAME}" ${BUILD_PATH}/tmp/${NULSTAR_FILE_NAME}
+    fi
+    if [ -f "${BUILD_PATH}/tmp/${NULSTAR_FILE_NAME}" ]; then
+        tar -xvf "${BUILD_PATH}/tmp/${NULSTAR_FILE_NAME}" -C "${BUILD_PATH}/tmp"
         cp -Rf "${BUILD_PATH}/tmp/Release/Modules" ${RELEASE_PATH}
         cp -Rf "${BUILD_PATH}/tmp/Release/Libraries" ${RELEASE_PATH}
-        echo "#!/bin/bash" > "${RELEASE_PATH}/start"
-        echo 'cd `dirname $0`' >> "${RELEASE_PATH}/start"
-        echo `cat ${BUILD_PATH}/tmp/Release/Nulstar.sh`" &" >> "${RELEASE_PATH}/start"
-#        echo "./check-status" >> "${RELEASE_PATH}/start"
+        cp "${BUILD_PATH}/start-nulstar" "$BUILD_PATH/tmp/start-nulstar"
+        echo "" >> "$BUILD_PATH/tmp/start-nulstar"
+        echo `cat ${BUILD_PATH}/tmp/Release/Nulstar.sh`" &" >> "$BUILD_PATH/tmp/start-nulstar"
+        cp  "$BUILD_PATH/tmp/start-nulstar" "${RELEASE_PATH}/start"
         chmod u+x "${RELEASE_PATH}/start"
-#        cp -f "${BUILD_PATH}/tmp/Release/Nulstar.sh" "${RELEASE_PATH}/start"
-#        echo `cat ${RELEASE_PATH}/start`" &" > ${RELEASE_PATH}/start
-        rm "./${NULSTAR_FILE_NAME}"
     fi
     log "build Nulstar done"
 fi
@@ -558,6 +559,16 @@ do
 done
 log "============ PACKAGE MODULES DONE ==============="
 cd $PROJECT_PATH
+
+moduleListFile=${MODULES_BIN_PATH}/.modules
+echo $moduleListFile
+if [ -f "${moduleListFile}" ] ; then
+    rm -f $moduleListFile
+fi
+for module in ${managedModules[@]}
+do
+    echo "$module" >> $moduleListFile
+done
 if [ -n "${JRE_HOME}" ]; then
 log "============ COPY JRE TO libs ==================="
 
@@ -583,8 +594,8 @@ log "============ COPY JRE TO libs done ============"
 fi
 
 log "================ COPY SCRIPT ==============="
-	cp "${BUILD_PATH}/default-config.ncf" "${MODULES_BIN_PATH}/nuls.ncf"
-	chmod u+r "${MODULES_BIN_PATH}/nuls.ncf"
+	cp "${BUILD_PATH}/default-config.ncf" "${MODULES_BIN_PATH}/.default-config.ncf"
+	chmod u+r "${MODULES_BIN_PATH}/.default-config.ncf"
 	cp "${BUILD_PATH}/cmd" "${MODULES_BIN_PATH}/"
 	chmod u+x "${MODULES_BIN_PATH}/cmd"
 	cp "${BUILD_PATH}/create-address" "${MODULES_BIN_PATH}/"
@@ -600,19 +611,19 @@ log "================ COPY SCRIPT ==============="
 	done
 	eval "sed -e 's/%MODULES%/${tempModuleList}/g' ${BUILD_PATH}/check-status > ${BUILD_PATH}/tmp/check-status-temp"
 	eval "sed -e 's/%MODULES%/${tempModuleList}/g' ${BUILD_PATH}/shutdown-nulstar > ${BUILD_PATH}/tmp/shutdown-nulstar"
-    cp "${BUILD_PATH}/tmp/shutdown-nulstar" "${MODULES_BIN_PATH}/shutdown"
-	chmod u+x "${MODULES_BIN_PATH}/shutdown"
+    cp "${BUILD_PATH}/tmp/shutdown-nulstar" "${MODULES_BIN_PATH}/stop"
+	chmod u+x "${MODULES_BIN_PATH}/stop"
 	cp "${BUILD_PATH}/tmp/check-status-temp" "${MODULES_BIN_PATH}/check-status"
 	chmod u+x "${MODULES_BIN_PATH}/check-status"
 log "===============  COPY SCRIPT DONE ==========="
 DOMOCK=`hasPackageModule "mykernel"`
 if [ -n "${DOMOCK}" ]; then
-	log "============== BUILD start-mykernel script ====================="
-	cp "${BUILD_PATH}/start-mykernel" "${MODULES_BIN_PATH}/"
-	chmod u+x "${MODULES_BIN_PATH}/start-mykernel"
-	cp "${BUILD_PATH}/stop-mykernel" "${MODULES_BIN_PATH}/"
-	chmod u+x "${MODULES_BIN_PATH}/stop-mykernel"
-	log "============== BUILD start-mykernel script done ================"
+	log "============== BUILD start-dev script ====================="
+	cp "${BUILD_PATH}/start-mykernel" "${MODULES_BIN_PATH}/start-dev"
+	chmod u+x "${MODULES_BIN_PATH}/start-dev"
+	cp "${BUILD_PATH}/stop-mykernel" "${MODULES_BIN_PATH}/stop-dev"
+	chmod u+x "${MODULES_BIN_PATH}/stop-dev"
+	log "============== BUILD start-dev script done ================"
 fi
 
 if [ -n "${BUILDTAR}" ]; then
