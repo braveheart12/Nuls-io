@@ -286,9 +286,6 @@ public class BlockChain extends BaseNulsData {
         this.minAvailableNodeNum = txChain.getMinAvailableNodeNum();
         this.chainName = txChain.getName();
         this.supportInflowAsset = txChain.isSupportInflowAsset();
-        this.signatureByzantineRatio = txChain.getSignatureByzantineRatio();
-        this.verifierList = txChain.getVerifierList();
-        this.maxSignatureCount = txChain.getMaxSignatureCount();
     }
 
     public byte[] parseToTransaction(Asset asset) throws IOException {
@@ -484,7 +481,7 @@ public class BlockChain extends BaseNulsData {
         this.setCreateTime(NulsDateUtils.getCurrentTimeSeconds());
         String[] verifierList = String.valueOf(map.get("verifierList")).split(",");
         this.setVerifierList(Arrays.asList(verifierList));
-        this.setSignatureByzantineRatio(Integer.valueOf(map.get("signatureBFTRatio").toString()));
+        this.setSignatureByzantineRatio(Integer.valueOf(map.get("signatureByzantineRatio").toString()));
         this.setMaxSignatureCount(Integer.valueOf(map.get("maxSignatureCount").toString()));
     }
 }

@@ -35,7 +35,6 @@ public final class TxCmd {
      */
     public static final String TX_GET_SYSTEM_TYPES = "tx_getSystemTypes";
     public static final String TX_REGISTER = "tx_register";
-    public static final String TX_UNREGISTER = "tx_unregister";
     public static final String TX_PACKABLETXS = "tx_packableTxs";
     public static final String TX_BACKPACKABLETXS = "tx_backPackableTxs";
     public static final String TX_SAVE = "tx_save";
@@ -56,6 +55,11 @@ public final class TxCmd {
      * 修改节点共识状态
      */
     public static final String TX_CS_STATE = "tx_cs_state";
+
+    /**
+     * 修改节点处理交易状态
+     */
+    public static final String TX_BL_STATE = "tx_bl_state";
 
 
     public static final String TX_NEWTX = "tx_newTx";

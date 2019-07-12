@@ -20,7 +20,6 @@
 
 package io.nuls.block.service.impl;
 
-import io.nuls.base.RPCUtil;
 import io.nuls.base.data.*;
 import io.nuls.base.data.po.BlockHeaderPo;
 import io.nuls.block.constant.BlockErrorCode;
@@ -38,11 +37,11 @@ import io.nuls.block.storage.BlockStorageService;
 import io.nuls.block.storage.ChainStorageService;
 import io.nuls.block.utils.BlockUtil;
 import io.nuls.block.utils.ChainGenerator;
-import io.nuls.block.utils.LoggerUtil;
 import io.nuls.core.basic.Result;
 import io.nuls.core.constant.TxType;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
+import io.nuls.core.core.config.ConfigurationLoader;
 import io.nuls.core.exception.NulsException;
 import io.nuls.core.exception.NulsRuntimeException;
 import io.nuls.core.log.logback.NulsLogger;
@@ -53,6 +52,7 @@ import io.nuls.core.rpc.model.message.MessageUtil;
 import io.nuls.core.rpc.model.message.Response;
 import io.nuls.core.rpc.netty.channel.manager.ConnectManager;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -71,7 +71,8 @@ import static io.nuls.block.constant.Constant.BLOCK_HEADER_INDEX;
  */
 @Component
 public class BlockServiceImpl implements BlockService {
-
+    @Autowired
+    private ConfigurationLoader configurationLoader;
     @Autowired
     private BlockStorageService blockStorageService;
     @Autowired
@@ -217,10 +218,14 @@ public class BlockServiceImpl implements BlockService {
                 return null;
             }
             block.setHeader(BlockUtil.fromBlockHeaderPo(blockHeaderPo));
-            block.setTxs(TransactionUtil.getConfirmedTransactions(chainId, blockHeaderPo.getTxHashList()));
+            List<Transaction> transactions = TransactionUtil.getConfirmedTransactions(chainId, blockHeaderPo.getTxHashList());
+            if (transactions.isEmpty()) {
+                return null;
+            }
+            block.setTxs(transactions);
             return block;
         } catch (Exception e) {
-            commonLog.error("", e);
+            commonLog.error("error when getBlock by height", e);
             return null;
         }
     }
@@ -274,6 +279,15 @@ public class BlockServiceImpl implements BlockService {
                 commonLog.debug("verifyBlock fail!chainId-" + chainId + ",height-" + height);
                 return false;
             }
+            //同步\链切换\孤儿链对接过程中不进行区块广播
+            if (download == 1) {
+                if (broadcast) {
+                    broadcastBlock(chainId, block);
+                }
+                if (forward) {
+                    forwardBlock(chainId, hash, null);
+                }
+            }
             long elapsedNanos1 = System.nanoTime() - startTime1;
             commonLog.debug("1. verifyBlock time-" + elapsedNanos1);
             //2.设置最新高度,如果失败则恢复上一个高度
@@ -289,9 +303,12 @@ public class BlockServiceImpl implements BlockService {
             //3.保存区块头, 保存交易
             long startTime3 = System.nanoTime();
             BlockHeaderPo blockHeaderPo = BlockUtil.toBlockHeaderPo(block);
-            boolean headerSave = false;
+            boolean headerSave;
             boolean txSave = false;
             if (!(headerSave = blockStorageService.save(chainId, blockHeaderPo)) || !(txSave = TransactionUtil.save(chainId, blockHeaderPo, block.getTxs(), localInit, (List) result.getData()))) {
+                if (headerSave && !TransactionUtil.rollback(chainId, blockHeaderPo)) {
+                    throw new NulsRuntimeException(BlockErrorCode.TX_ROLLBACK_ERROR);
+                }
                 if (!blockStorageService.remove(chainId, height)) {
                     throw new NulsRuntimeException(BlockErrorCode.HEADER_REMOVE_ERROR);
                 }
@@ -338,11 +355,7 @@ public class BlockServiceImpl implements BlockService {
                 commonLog.error("ProtocolUtil saveNotice fail!chainId-" + chainId + ",height-" + height);
                 return false;
             }
-            try {
-                CrossChainUtil.heightNotice(chainId, height, RPCUtil.encode(block.getHeader().serialize()));
-            }catch (Exception e){
-                LoggerUtil.COMMON_LOG.error(e);
-            }
+            CrossChainUtil.heightNotice(chainId, height, header);
 
             //6.如果不是第一次启动,则更新主链属性
             if (!localInit) {
@@ -355,15 +368,6 @@ public class BlockServiceImpl implements BlockService {
                     hashList.removeFirst();
                 }
                 hashList.addLast(hash);
-            }
-            //同步\链切换\孤儿链对接过程中不进行区块广播
-            if (download == 1) {
-                if (broadcast) {
-                    broadcastBlock(chainId, block);
-                }
-                if (forward) {
-                    forwardBlock(chainId, hash, null);
-                }
             }
             Response response = MessageUtil.newSuccessResponse("");
             Map<String, Long> responseData = new HashMap<>(2);
@@ -543,7 +547,7 @@ public class BlockServiceImpl implements BlockService {
         BlockHeader header = block.getHeader();
         //0.版本验证：通过获取block中extends字段的版本号
         if (header.getHeight() > 0 && !ProtocolUtil.checkBlockVersion(chainId, header)) {
-            commonLog.debug("checkBlockVersion failed! height-" + header.getHeight());
+            commonLog.error("checkBlockVersion failed! height-" + header.getHeight());
             return Result.getFailed(BlockErrorCode.BLOCK_VERIFY_ERROR);
         }
 
@@ -567,7 +571,7 @@ public class BlockServiceImpl implements BlockService {
         //共识验证
         Result consensusVerify = ConsensusUtil.verify(chainId, block, download);
         if (consensusVerify.isFailed()) {
-            commonLog.debug("consensusVerify-" + consensusVerify);
+            commonLog.error("consensusVerify-" + consensusVerify);
             return Result.getFailed(BlockErrorCode.BLOCK_VERIFY_ERROR);
         }
         return consensusVerify;
@@ -583,10 +587,20 @@ public class BlockServiceImpl implements BlockService {
             //1.判断有没有创世块,如果没有就初始化创世块并保存
             if (null == genesisBlock) {
                 ChainParameters chainParameters = context.getParameters();
-                if (StringUtils.isBlank(chainParameters.getGenesisBlockPath())) {
+                String genesisBlockPath = chainParameters.getGenesisBlockPath();
+                if (StringUtils.isBlank(genesisBlockPath)) {
                     genesisBlock = GenesisBlock.getInstance(chainId, chainParameters.getAssetId());
                 } else {
-                    genesisBlock = GenesisBlock.getInstance(chainId, chainParameters.getAssetId(), Files.readString(Path.of(chainParameters.getGenesisBlockPath())));
+                    ConfigurationLoader.ConfigItem item = configurationLoader.getConfigItem("genesisBlockPath");
+                    String configFile = item.getConfigFile();
+                    String value = item.getValue();
+                    File file = new File(value);
+                    if (file.isAbsolute()) {
+                        genesisBlock = GenesisBlock.getInstance(chainId, chainParameters.getAssetId(), Files.readString(file.toPath()));
+                    } else {
+                        configFile = configFile.substring(0, configFile.lastIndexOf(File.separator));
+                        genesisBlock = GenesisBlock.getInstance(chainId, chainParameters.getAssetId(), Files.readString(Path.of(configFile, value)));
+                    }
                 }
                 boolean b = saveBlock(chainId, genesisBlock, true, 0, false, false, false);
                 if (!b) {

@@ -27,38 +27,43 @@ package io.nuls.account.model.dto;
 
 import io.nuls.account.model.bo.Account;
 import io.nuls.core.crypto.HexUtil;
+import io.nuls.core.rpc.model.ApiModel;
+import io.nuls.core.rpc.model.ApiModelProperty;
 
 /**
  * @author: qinyifeng
  */
-
-public class SimpleAccountDto {
+@ApiModel
+public class SimpleAccountDTO {
     /**
      * 账户地址
      */
+    @ApiModelProperty(description = "账户地址")
     private String address;
 
     /**
      * 别名
      */
+    @ApiModelProperty(description = "别名")
     private String alias;
 
     /**
      * 公钥Hex.encode(byte[])
      */
+    @ApiModelProperty(description = "公钥")
     private String pubkeyHex;
-
 
     /**
      * 已加密私钥Hex.encode(byte[])
      */
+    @ApiModelProperty(description = "已加密私钥")
     private String encryptedPrikeyHex;
 
-    public SimpleAccountDto() {
+    public SimpleAccountDTO() {
 
     }
 
-    public SimpleAccountDto(Account account) {
+    public SimpleAccountDTO(Account account) {
         this.address = account.getAddress().getBase58();
         this.alias = account.getAlias();
         this.pubkeyHex = HexUtil.encode(account.getPubKey());

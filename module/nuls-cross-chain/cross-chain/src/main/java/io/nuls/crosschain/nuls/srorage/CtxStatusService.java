@@ -36,7 +36,7 @@ public interface CtxStatusService {
      * @param chainID   链ID
      * @return          删除成功与否
      * */
-    boolean delete(NulsHash atxHash,int chainID);
+    boolean delete(NulsHash atxHash, int chainID);
 
     /**
      * 查询所有

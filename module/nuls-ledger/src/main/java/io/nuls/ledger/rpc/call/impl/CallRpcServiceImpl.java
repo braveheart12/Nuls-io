@@ -53,7 +53,7 @@ public class CallRpcServiceImpl implements CallRpcService {
         map.put("chainId", chainId);
         map.put("height", height);
         try {
-            Response response = ResponseMessageProcessor.requestAndResponse(ModuleE.BL.abbr, CmdConstant.CMD_GET_BLOCK_BY_HEIGHT, map, 1000);
+            Response response = ResponseMessageProcessor.requestAndResponse(ModuleE.BL.abbr, CmdConstant.CMD_GET_BLOCK_BY_HEIGHT, map);
             if (null != response && response.isSuccess()) {
                 Map responseData = (Map) response.getResponseData();
                 String hex = (String) responseData.get(CmdConstant.CMD_GET_BLOCK_BY_HEIGHT);
@@ -68,7 +68,31 @@ public class CallRpcServiceImpl implements CallRpcService {
             }
         } catch (Exception e) {
             LoggerUtil.logger(chainId).error("getBlockByHeight error,chainId={},height={}.exception={}", chainId, height, e.getMessage());
+            LoggerUtil.logger(chainId).error(e);
         }
         return null;
+    }
+    @Override
+    public long getBlockLatestHeight(int chainId) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("chainId", chainId);
+        try {
+            Response response = ResponseMessageProcessor.requestAndResponse(ModuleE.BL.abbr, CmdConstant.CMD_LATEST_HEIGHT, map);
+            if (null != response && response.isSuccess()) {
+                Map responseData = (Map) response.getResponseData();
+                if(null != responseData) {
+                    Object datas =   responseData.get(CmdConstant.CMD_LATEST_HEIGHT);
+                    if(null != datas){
+                        long height = Long.valueOf(((Map)datas).get("value").toString());
+                        return height;
+                    }
+                }
+            } else {
+                LoggerUtil.logger(chainId).error("getBlockLatestHeight fail.response={}", JSONUtils.obj2json(response));
+            }
+        } catch (Exception e) {
+            LoggerUtil.logger(chainId).error(e);
+        }
+        return 0;
     }
 }

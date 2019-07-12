@@ -32,7 +32,7 @@ import io.nuls.core.crypto.HexUtil;
  * @author: qinyifeng
  */
 
-public class AccountDto {
+public class AccountDTO {
     /**
      * 账户地址
      */
@@ -69,11 +69,11 @@ public class AccountDto {
     private String remark;
 
 
-    public AccountDto() {
+    public AccountDTO() {
 
     }
 
-    public AccountDto(Account account) {
+    public AccountDTO(Account account) {
         this.address = account.getAddress().getBase58();
         this.alias = account.getAlias();
         this.pubKey = HexUtil.encode(account.getPubKey());

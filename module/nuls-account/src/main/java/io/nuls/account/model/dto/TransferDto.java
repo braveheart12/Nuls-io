@@ -28,53 +28,53 @@ package io.nuls.account.model.dto;
 import java.util.List;
 
 /**
- * 创建普通转账交易，包括多账户转账
+ * 创建转账交易，包括多账户转账
  *
  * @author: qinyifeng
  */
-public class TransferDto {
+public class TransferDTO {
 
     /**
      * 链ID
      */
-    private int chainId;
+    private Integer chainId;
 
     /**
      * 交易输入
      */
-    private List<CoinDto> inputs;
+    private List<CoinDTO> inputs;
 
     /**
      * 交易输出
      */
-    private List<CoinDto> outputs;
+    private List<CoinDTO> outputs;
 
     /**
      * 备注
      */
     private String remark;
 
-    public int getChainId() {
+    public Integer getChainId() {
         return chainId;
     }
 
-    public void setChainId(int chainId) {
+    public void setChainId(Integer chainId) {
         this.chainId = chainId;
     }
 
-    public List<CoinDto> getInputs() {
+    public List<CoinDTO> getInputs() {
         return inputs;
     }
 
-    public List<CoinDto> getOutputs() {
+    public List<CoinDTO> getOutputs() {
         return outputs;
     }
 
-    public void setOutputs(List<CoinDto> outputs) {
+    public void setOutputs(List<CoinDTO> outputs) {
         this.outputs = outputs;
     }
 
-    public void setInputs(List<CoinDto> inputs) {
+    public void setInputs(List<CoinDTO> inputs) {
         this.inputs = inputs;
     }
 
